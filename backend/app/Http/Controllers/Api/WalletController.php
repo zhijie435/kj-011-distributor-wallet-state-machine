@@ -6,6 +6,9 @@ use App\Enums\WalletStatus;
 use App\Enums\WalletTransactionType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\WalletTransitionRequest;
+use App\Http\Resources\DealerWalletResource;
+use App\Http\Resources\WalletStateLogResource;
+use App\Http\Resources\WalletTransactionResource;
 use App\Models\DealerWallet;
 use App\Models\Distributor;
 use App\Services\WalletService;
@@ -24,14 +27,16 @@ class WalletController extends Controller
 
         $wallets = $this->service->listWallets($params);
 
-        return $this->success($wallets);
+        $wallets->load(['distributor']);
+
+        return $this->success(DealerWalletResource::collection($wallets)->response()->getData(true));
     }
 
     public function show(DealerWallet $wallet)
     {
         $wallet->load(['distributor', 'stateLogs.operator']);
 
-        return $this->success($wallet);
+        return $this->success(new DealerWalletResource($wallet));
     }
 
     public function store(Request $request)
@@ -43,7 +48,9 @@ class WalletController extends Controller
         $distributor = Distributor::findOrFail($validated['distributor_id']);
         $wallet = $this->service->createWallet($distributor, $request->user()->id);
 
-        return $this->success($wallet, '钱包创建成功', 201);
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包创建成功', 201);
     }
 
     public function balance(DealerWallet $wallet)
@@ -78,7 +85,9 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($wallet, '钱包激活成功');
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包激活成功');
     }
 
     public function freeze(WalletTransitionRequest $request, DealerWallet $wallet)
@@ -89,7 +98,9 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($wallet, '钱包冻结成功');
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包冻结成功');
     }
 
     public function unfreeze(WalletTransitionRequest $request, DealerWallet $wallet)
@@ -100,7 +111,9 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($wallet, '钱包解冻成功');
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包解冻成功');
     }
 
     public function restrict(WalletTransitionRequest $request, DealerWallet $wallet)
@@ -111,7 +124,9 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($wallet, '钱包限制成功');
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包限制成功');
     }
 
     public function unrestrict(WalletTransitionRequest $request, DealerWallet $wallet)
@@ -122,7 +137,9 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($wallet, '钱包解除限制成功');
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包解除限制成功');
     }
 
     public function close(WalletTransitionRequest $request, DealerWallet $wallet)
@@ -133,7 +150,9 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($wallet, '钱包注销成功');
+        $wallet->load(['distributor']);
+
+        return $this->success(new DealerWalletResource($wallet), '钱包注销成功');
     }
 
     public function recharge(Request $request, DealerWallet $wallet)
@@ -150,7 +169,7 @@ class WalletController extends Controller
             $request->user()->id
         );
 
-        return $this->success($transaction, '充值成功');
+        return $this->success(new WalletTransactionResource($transaction), '充值成功');
     }
 
     public function transactions(Request $request, DealerWallet $wallet)
@@ -160,7 +179,9 @@ class WalletController extends Controller
 
         $transactions = $this->service->getWalletTransactions($wallet, $params);
 
-        return $this->success($transactions);
+        $transactions->load(['operator']);
+
+        return $this->success(WalletTransactionResource::collection($transactions)->response()->getData(true));
     }
 
     public function stateLogs(Request $request, DealerWallet $wallet)
@@ -169,7 +190,9 @@ class WalletController extends Controller
 
         $logs = $this->service->getWalletStateLogs($wallet, $params);
 
-        return $this->success($logs);
+        $logs->load(['operator']);
+
+        return $this->success(WalletStateLogResource::collection($logs)->response()->getData(true));
     }
 
     public function statistics(Request $request, DealerWallet $wallet)
@@ -196,7 +219,10 @@ class WalletController extends Controller
         $params = $request->only(['type', 'start_date', 'end_date']);
         $params['per_page'] = $this->perPage($request);
 
-        return $this->success($this->service->getWalletTransactions($wallet, $params));
+        $transactions = $this->service->getWalletTransactions($wallet, $params);
+        $transactions->load(['operator']);
+
+        return $this->success(WalletTransactionResource::collection($transactions)->response()->getData(true));
     }
 
     public function myStatistics(Request $request)

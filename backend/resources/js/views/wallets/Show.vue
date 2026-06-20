@@ -8,14 +8,40 @@
             <div slot="header">钱包信息</div>
             <el-descriptions :column="1" border size="small">
               <el-descriptions-item label="钱包编号">{{ wallet.wallet_no }}</el-descriptions-item>
-              <el-descriptions-item label="经销商">{{ wallet.distributor ? wallet.distributor.name : '-' }}</el-descriptions-item>
+              <el-descriptions-item label="经销商">
+                {{ wallet.distributor_name || wallet.distributor?.name || '-' }}
+              </el-descriptions-item>
               <el-descriptions-item label="状态">
-                <el-tag :type="getStatusType(wallet.status)" size="small">{{ getStatusLabel(wallet.status) }}</el-tag>
+                <el-tag :type="wallet.status_color" size="small">{{ wallet.status_label }}</el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="余额">{{ parseFloat(wallet.balance).toFixed(2) }}</el-descriptions-item>
               <el-descriptions-item label="冻结金额">{{ parseFloat(wallet.frozen_amount).toFixed(2) }}</el-descriptions-item>
-              <el-descriptions-item label="可用余额">{{ (parseFloat(wallet.balance) - parseFloat(wallet.frozen_amount)).toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="可用余额">{{ parseFloat(wallet.available_balance).toFixed(2) }}</el-descriptions-item>
               <el-descriptions-item label="信用额度">{{ parseFloat(wallet.credit_limit).toFixed(2) }}</el-descriptions-item>
+              <el-descriptions-item label="币种">{{ wallet.currency }}</el-descriptions-item>
+              <el-descriptions-item v-if="wallet.freeze_reason" label="冻结原因">
+                {{ wallet.freeze_reason }}
+              </el-descriptions-item>
+              <el-descriptions-item v-if="wallet.restrict_reason" label="限制原因">
+                {{ wallet.restrict_reason }}
+              </el-descriptions-item>
+              <el-descriptions-item v-if="wallet.close_reason" label="注销原因">
+                {{ wallet.close_reason }}
+              </el-descriptions-item>
+              <el-descriptions-item label="最后激活">
+                {{ wallet.last_activated_at || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="最后冻结">
+                {{ wallet.last_frozen_at || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="最后限制">
+                {{ wallet.last_restricted_at || '-' }}
+              </el-descriptions-item>
+              <el-descriptions-item v-if="wallet.closed_at" label="注销时间">
+                {{ wallet.closed_at }}
+              </el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ wallet.created_at }}</el-descriptions-item>
+              <el-descriptions-item label="更新时间">{{ wallet.updated_at }}</el-descriptions-item>
             </el-descriptions>
           </el-card>
 
@@ -50,10 +76,22 @@
             <div slot="header">交易记录</div>
             <el-table :data="transactions" stripe border size="small">
               <el-table-column prop="transaction_no" label="交易号" width="180" />
-              <el-table-column prop="type_label" label="类型" width="80" />
-              <el-table-column prop="amount" label="金额" width="100" align="right" />
-              <el-table-column prop="balance_after" label="余额" width="100" align="right" />
+              <el-table-column prop="type_label" label="类型" width="100" />
+              <el-table-column label="金额" width="120" align="right">
+                <template slot-scope="{ row }">
+                  <span :style="{ color: row.is_income ? '#67C23A' : row.is_expense ? '#F56C6C' : '#909399' }">
+                    {{ row.amount_display }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="balance_before" label="变动前" width="110" align="right">
+                <template slot-scope="{ row }">{{ parseFloat(row.balance_before).toFixed(2) }}</template>
+              </el-table-column>
+              <el-table-column prop="balance_after" label="变动后" width="110" align="right">
+                <template slot-scope="{ row }">{{ parseFloat(row.balance_after).toFixed(2) }}</template>
+              </el-table-column>
               <el-table-column prop="remark" label="备注" />
+              <el-table-column prop="operator_name" label="操作人" width="100" />
               <el-table-column prop="created_at" label="时间" width="170" />
             </el-table>
             <el-pagination
@@ -76,9 +114,9 @@
                 :timestamp="log.created_at"
                 placement="top"
               >
-                <el-tag size="mini" type="info">{{ log.from_status_label }}</el-tag>
+                <el-tag size="mini" :type="log.from_status_color">{{ log.from_status_label }}</el-tag>
                 <i class="el-icon-right" style="margin: 0 5px"></i>
-                <el-tag size="mini" :type="getStatusType(log.to_status)">{{ log.to_status_label }}</el-tag>
+                <el-tag size="mini" :type="log.to_status_color">{{ log.to_status_label }}</el-tag>
                 <span style="margin-left: 10px; color: #909399">{{ log.action_label }}</span>
                 <div v-if="log.reason" style="color: #909399; font-size: 12px; margin-top: 4px">原因：{{ log.reason }}</div>
                 <div v-if="log.operator_name" style="color: #909399; font-size: 12px">操作人：{{ log.operator_name }}</div>
@@ -171,16 +209,6 @@ export default {
       } finally {
         this.recharging = false;
       }
-    },
-
-    getStatusType(status) {
-      const map = { active: 'success', frozen: 'danger', restricted: 'warning', inactive: 'info', closed: '' };
-      return map[status] || '';
-    },
-
-    getStatusLabel(status) {
-      const map = { active: '正常', frozen: '已冻结', restricted: '受限', inactive: '未激活', closed: '已注销' };
-      return map[status] || status;
     },
   },
 };

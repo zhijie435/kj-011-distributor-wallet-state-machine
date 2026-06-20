@@ -29,7 +29,7 @@
         <el-table-column prop="distributor_name" label="经销商" width="150" />
         <el-table-column label="状态" width="100">
           <template slot-scope="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag>
+            <el-tag :type="row.status_color" size="small">{{ row.status_label }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="balance" label="余额" width="120" align="right">
@@ -37,6 +37,12 @@
         </el-table-column>
         <el-table-column prop="frozen_amount" label="冻结金额" width="120" align="right">
           <template slot-scope="{ row }">{{ parseFloat(row.frozen_amount).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column prop="available_balance" label="可用余额" width="120" align="right">
+          <template slot-scope="{ row }">{{ parseFloat(row.available_balance).toFixed(2) }}</template>
+        </el-table-column>
+        <el-table-column prop="credit_limit" label="信用额度" width="120" align="right">
+          <template slot-scope="{ row }">{{ parseFloat(row.credit_limit).toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="180" />
         <el-table-column label="操作" fixed="right" width="320">
@@ -198,16 +204,6 @@ export default {
       } finally {
         this.transitioning = false;
       }
-    },
-
-    getStatusType(status) {
-      const map = { active: 'success', frozen: 'danger', restricted: 'warning', inactive: 'info', closed: '' };
-      return map[status] || '';
-    },
-
-    getStatusLabel(status) {
-      const map = { active: '正常', frozen: '已冻结', restricted: '受限', inactive: '未激活', closed: '已注销' };
-      return map[status] || status;
     },
   },
 };
