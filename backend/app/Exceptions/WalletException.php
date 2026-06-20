@@ -48,6 +48,13 @@ class WalletException extends BaseException
         ]);
     }
 
+    public static function restrictedWallet(): self
+    {
+        return new self('钱包已受限，无法操作', [
+            'error_code' => 'WALLET_RESTRICTED',
+        ]);
+    }
+
     public static function frozenWallet(): self
     {
         return new self('钱包已冻结，无法操作', [

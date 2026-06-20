@@ -401,6 +401,10 @@ class WalletService
         if ($wallet->isFrozen()) {
             throw WalletException::frozenWallet();
         }
+
+        if ($wallet->isRestricted()) {
+            throw WalletException::restrictedWallet();
+        }
     }
 
     protected function generateWalletNo(): string

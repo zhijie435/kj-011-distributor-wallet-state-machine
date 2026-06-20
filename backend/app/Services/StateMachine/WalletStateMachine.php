@@ -153,7 +153,7 @@ class WalletStateMachine implements StateMachineInterface
             case $targetState === WalletStatus::RESTRICTED && $fromStatus === WalletStatus::ACTIVE:
                 $this->wallet->freeze_reason = null;
                 break;
-            case $targetState === WalletStatus::CLOSED && $fromStatus === WalletStatus::ACTIVE:
+            case $targetState === WalletStatus::CLOSED:
                 $this->wallet->freeze_reason = null;
                 $this->wallet->restrict_reason = null;
                 break;

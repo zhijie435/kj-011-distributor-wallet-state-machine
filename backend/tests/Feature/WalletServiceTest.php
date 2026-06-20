@@ -451,4 +451,84 @@ class WalletServiceTest extends TestCase
         $this->assertEquals(5, $wallet->stateLogs()->count());
         $this->assertEquals(2, $wallet->transactions()->count());
     }
+
+    public function test_recharge_throws_exception_for_restricted_wallet(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->restricted()->create();
+
+        $this->expectException(WalletException::class);
+
+        $this->walletService->recharge($wallet, 100.00);
+    }
+
+    public function test_deduct_throws_exception_for_restricted_wallet(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->restricted()->create([
+            'balance' => 500.00,
+        ]);
+
+        $this->expectException(WalletException::class);
+
+        $this->walletService->deduct($wallet, 100.00, WalletTransactionType::PAYMENT);
+    }
+
+    public function test_freeze_amount_throws_exception_for_restricted_wallet(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->restricted()->create([
+            'balance' => 500.00,
+        ]);
+
+        $this->expectException(WalletException::class);
+
+        $this->walletService->freezeAmount($wallet, 100.00);
+    }
+
+    public function test_close_wallet_from_frozen_clears_freeze_reason(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->frozen()->create([
+            'balance' => 0,
+            'frozen_amount' => 0,
+        ]);
+        $operator = User::factory()->create();
+
+        $updatedWallet = $this->walletService->closeWallet($wallet, '注销冻结账户', $operator->id);
+
+        $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
+        $this->assertNull($updatedWallet->freeze_reason);
+        $this->assertEquals('注销冻结账户', $updatedWallet->close_reason);
+    }
+
+    public function test_close_wallet_from_restricted_clears_restrict_reason(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->restricted()->create([
+            'balance' => 0,
+            'frozen_amount' => 0,
+        ]);
+        $operator = User::factory()->create();
+
+        $updatedWallet = $this->walletService->closeWallet($wallet, '注销受限账户', $operator->id);
+
+        $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
+        $this->assertNull($updatedWallet->restrict_reason);
+        $this->assertEquals('注销受限账户', $updatedWallet->close_reason);
+    }
+
+    public function test_close_wallet_from_inactive_clears_reasons(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->create();
+        $operator = User::factory()->create();
+
+        $updatedWallet = $this->walletService->closeWallet($wallet, '注销未激活账户', $operator->id);
+
+        $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
+        $this->assertNull($updatedWallet->freeze_reason);
+        $this->assertNull($updatedWallet->restrict_reason);
+        $this->assertEquals('注销未激活账户', $updatedWallet->close_reason);
+    }
 }
