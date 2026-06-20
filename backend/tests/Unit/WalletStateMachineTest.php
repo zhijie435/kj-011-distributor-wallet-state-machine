@@ -168,6 +168,7 @@ class WalletStateMachineTest extends TestCase
     public function test_transition_by_action_freeze(): void
     {
         $this->wallet->status = WalletStatus::ACTIVE;
+        $this->wallet->save();
         $stateMachine = new WalletStateMachine($this->wallet);
 
         $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE, [
@@ -183,6 +184,7 @@ class WalletStateMachineTest extends TestCase
     {
         $this->wallet->status = WalletStatus::FROZEN;
         $this->wallet->freeze_reason = '违规操作';
+        $this->wallet->save();
         $stateMachine = new WalletStateMachine($this->wallet);
 
         $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE);
@@ -194,6 +196,7 @@ class WalletStateMachineTest extends TestCase
     public function test_transition_by_action_restrict(): void
     {
         $this->wallet->status = WalletStatus::ACTIVE;
+        $this->wallet->save();
         $stateMachine = new WalletStateMachine($this->wallet);
 
         $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::RESTRICT, [
@@ -209,6 +212,7 @@ class WalletStateMachineTest extends TestCase
     {
         $this->wallet->status = WalletStatus::RESTRICTED;
         $this->wallet->restrict_reason = '风险预警';
+        $this->wallet->save();
         $stateMachine = new WalletStateMachine($this->wallet);
 
         $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::UNRESTRICT);
@@ -221,6 +225,7 @@ class WalletStateMachineTest extends TestCase
     {
         $this->wallet->status = WalletStatus::RESTRICTED;
         $this->wallet->restrict_reason = '风险预警';
+        $this->wallet->save();
         $stateMachine = new WalletStateMachine($this->wallet);
 
         $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE_FROM_RESTRICTED, [
@@ -237,6 +242,7 @@ class WalletStateMachineTest extends TestCase
         $this->wallet->status = WalletStatus::ACTIVE;
         $this->wallet->balance = 0;
         $this->wallet->frozen_amount = 0;
+        $this->wallet->save();
         $stateMachine = new WalletStateMachine($this->wallet);
 
         $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::CLOSE, [

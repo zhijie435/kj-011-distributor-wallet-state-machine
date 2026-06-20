@@ -47,6 +47,22 @@ class WalletStateMachine implements StateMachineInterface
             );
         }
 
+        if ($targetState->value === WalletStatus::CLOSED->value) {
+            if ((float) $this->wallet->balance > 0) {
+                return TransitionResult::failure(
+                    '钱包余额不为0，无法注销',
+                    ['balance' => (float) $this->wallet->balance]
+                );
+            }
+
+            if ((float) $this->wallet->frozen_amount > 0) {
+                return TransitionResult::failure(
+                    '钱包存在冻结金额，无法注销',
+                    ['frozen_amount' => (float) $this->wallet->frozen_amount]
+                );
+            }
+        }
+
         if (!$this->canTransitionTo($targetState)) {
             $allowedLabels = array_map(
                 fn(BackedEnum $s) => $s->label(),
@@ -63,38 +79,23 @@ class WalletStateMachine implements StateMachineInterface
             );
         }
 
-        if ($targetState === WalletStatus::CLOSED) {
-            if ((float) $this->wallet->balance > 0) {
-                return TransitionResult::failure(
-                    '钱包余额不为0，无法注销',
-                    ['balance' => (float) $this->wallet->balance]
-                );
-            }
-
-            if ((float) $this->wallet->frozen_amount > 0) {
-                return TransitionResult::failure(
-                    '钱包存在冻结金额，无法注销',
-                    ['frozen_amount' => (float) $this->wallet->frozen_amount]
-                );
-            }
-        }
-
         return TransitionResult::success('状态变更验证通过');
     }
 
     public function transitionTo(BackedEnum $targetState, array $context = []): DealerWallet
     {
-        $validation = $this->validateTransition($targetState, $context);
-
-        if ($validation->isInvalid()) {
-            throw StateTransitionException::invalidTransition(
-                $this->wallet->status->label(),
-                $targetState->label(),
-                array_map(fn(WalletStatus $s) => $s->label(), $this->wallet->status->allowedTransitions())
-            );
-        }
-
         return DB::transaction(function () use ($targetState, $context) {
+            $this->wallet = $this->wallet->lockForUpdate()->findOrFail($this->wallet->id);
+
+            $validation = $this->validateTransition($targetState, $context);
+
+            if ($validation->isInvalid()) {
+                throw new StateTransitionException(
+                    $validation->message,
+                    $validation->errors
+                );
+            }
+
             $fromStatus = $this->wallet->status;
 
             $this->wallet->status = $targetState;

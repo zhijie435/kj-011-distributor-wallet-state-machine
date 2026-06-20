@@ -41,79 +41,116 @@ class WalletService
     {
         $stateMachine = new WalletStateMachine($wallet);
 
-        return $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE, [
+        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE, [
             'reason' => $reason,
             'operator_id' => $operatorId,
         ]);
+
+        $wallet->load(['distributor']);
+
+        return $wallet;
     }
 
     public function freezeWallet(DealerWallet $wallet, string $reason, ?int $operatorId = null): DealerWallet
     {
-        $stateMachine = new WalletStateMachine($wallet);
+        return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
 
-        return $stateMachine->transitionByAction(
-            $wallet->isRestricted()
+            $action = $wallet->isRestricted()
                 ? WalletTransitionAction::FREEZE_FROM_RESTRICTED
-                : WalletTransitionAction::FREEZE,
-            [
+                : WalletTransitionAction::FREEZE;
+
+            $stateMachine = new WalletStateMachine($wallet);
+
+            $wallet = $stateMachine->transitionByAction($action, [
                 'reason' => $reason,
                 'operator_id' => $operatorId,
-            ]
-        );
+            ]);
+
+            $wallet->load(['distributor']);
+
+            return $wallet;
+        });
     }
 
     public function unfreezeWallet(DealerWallet $wallet, string $reason = '', ?int $operatorId = null): DealerWallet
     {
         return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
+
+            $stateMachine = new WalletStateMachine($wallet);
+            $wallet = $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE, [
+                'reason' => $reason,
+                'operator_id' => $operatorId,
+            ]);
+
             if ((float) $wallet->frozen_amount > 0) {
                 $this->unfreezeAmount($wallet, (float) $wallet->frozen_amount, '钱包解冻自动解冻冻结金额', $operatorId);
             }
 
-            $stateMachine = new WalletStateMachine($wallet);
+            $wallet->load(['distributor']);
 
-            return $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE, [
-                'reason' => $reason,
-                'operator_id' => $operatorId,
-            ]);
+            return $wallet->fresh();
         });
     }
 
     public function restrictWallet(DealerWallet $wallet, string $reason, ?int $operatorId = null): DealerWallet
     {
-        $stateMachine = new WalletStateMachine($wallet);
+        return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
 
-        return $stateMachine->transitionByAction(WalletTransitionAction::RESTRICT, [
-            'reason' => $reason,
-            'operator_id' => $operatorId,
-        ]);
+            $stateMachine = new WalletStateMachine($wallet);
+            $wallet = $stateMachine->transitionByAction(WalletTransitionAction::RESTRICT, [
+                'reason' => $reason,
+                'operator_id' => $operatorId,
+            ]);
+
+            $wallet->load(['distributor']);
+
+            return $wallet;
+        });
     }
 
     public function unrestrictWallet(DealerWallet $wallet, string $reason = '', ?int $operatorId = null): DealerWallet
     {
-        $stateMachine = new WalletStateMachine($wallet);
+        return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
 
-        return $stateMachine->transitionByAction(WalletTransitionAction::UNRESTRICT, [
-            'reason' => $reason,
-            'operator_id' => $operatorId,
-        ]);
+            $stateMachine = new WalletStateMachine($wallet);
+            $wallet = $stateMachine->transitionByAction(WalletTransitionAction::UNRESTRICT, [
+                'reason' => $reason,
+                'operator_id' => $operatorId,
+            ]);
+
+            $wallet->load(['distributor']);
+
+            return $wallet;
+        });
     }
 
     public function closeWallet(DealerWallet $wallet, string $reason, ?int $operatorId = null): DealerWallet
     {
-        if ((float) $wallet->balance > 0) {
-            throw WalletException::insufficientBalance($wallet->balance, 0);
-        }
+        return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
 
-        if ((float) $wallet->frozen_amount > 0) {
-            throw WalletException::frozenWallet();
-        }
+            if ((float) $wallet->balance > 0) {
+                throw WalletException::insufficientBalance($wallet->balance, 0);
+            }
 
-        $stateMachine = new WalletStateMachine($wallet);
+            if ((float) $wallet->frozen_amount > 0) {
+                throw WalletException::frozenWallet();
+            }
 
-        return $stateMachine->transitionByAction(WalletTransitionAction::CLOSE, [
-            'reason' => $reason,
-            'operator_id' => $operatorId,
-        ]);
+            $stateMachine = new WalletStateMachine($wallet);
+            $wallet = $stateMachine->transitionByAction(WalletTransitionAction::CLOSE, [
+                'reason' => $reason,
+                'operator_id' => $operatorId,
+            ]);
+
+            $wallet->load(['distributor']);
+
+            return $wallet;
+        });
     }
 
     public function recharge(DealerWallet $wallet, float $amount, string $remark = '', ?int $operatorId = null): WalletTransaction
@@ -259,6 +296,14 @@ class WalletService
             'last_restricted_at' => $wallet->last_restricted_at?->toDateTimeString(),
             'closed_at' => $wallet->closed_at?->toDateTimeString(),
             'allowed_transitions' => $wallet->getAllowedTransitions(),
+            'can_activate' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE),
+            'can_freeze' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::FROZEN),
+            'can_unfreeze' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE) && $wallet->isFrozen(),
+            'can_restrict' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::RESTRICTED),
+            'can_unrestrict' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE) && $wallet->isRestricted(),
+            'can_close' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::CLOSED)
+                && (float) $wallet->balance == 0
+                && (float) $wallet->frozen_amount == 0,
         ];
     }
 

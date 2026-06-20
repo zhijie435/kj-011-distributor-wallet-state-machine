@@ -192,19 +192,33 @@ export default {
     },
 
     async confirmTransition() {
-      if (!this.transitionForm.reason) {
-        this.$message.warning('请填写操作原因');
-        return;
+      if (this.transitionAction !== 'unfreeze' && this.transitionAction !== 'unrestrict' && this.transitionAction !== 'activate') {
+        if (!this.transitionForm.reason) {
+          this.$message.warning('请填写操作原因');
+          return;
+        }
       }
 
       this.transitioning = true;
       try {
-        await walletApi[this.transitionAction](this.transitionWalletId, this.transitionForm);
+        const { data } = await walletApi[this.transitionAction](this.transitionWalletId, this.transitionForm);
+        
+        if (data && data.data) {
+          const idx = this.wallets.findIndex(w => w.id === data.data.id);
+          if (idx !== -1) {
+            this.$set(this.wallets, idx, data.data);
+          }
+        }
+        
         this.$message.success('操作成功');
         this.showTransitionDialog = false;
-        this.loadWallets();
+        
+        setTimeout(async () => {
+          await this.loadWallets();
+        }, 300);
       } catch (e) {
         this.$message.error(e.response?.data?.message || '操作失败');
+        await this.loadWallets();
       } finally {
         this.transitioning = false;
       }

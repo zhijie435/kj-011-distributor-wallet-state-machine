@@ -294,13 +294,20 @@ export default {
 
       this.transitioning = true;
       try {
-        await walletApi[this.transitionAction](this.$route.params.id, this.transitionForm);
+        const { data } = await walletApi[this.transitionAction](this.$route.params.id, this.transitionForm);
+        if (data && data.data) {
+          this.wallet = data.data;
+        }
         this.$message.success('操作成功');
         this.showTransitionDialog = false;
-        this.loadWallet();
-        this.loadStateLogs();
+        await Promise.all([
+          this.loadWallet(),
+          this.loadStateLogs(),
+          this.loadStatistics(),
+        ]);
       } catch (e) {
         this.$message.error(e.response?.data?.message || '操作失败');
+        await this.loadWallet();
       } finally {
         this.transitioning = false;
       }

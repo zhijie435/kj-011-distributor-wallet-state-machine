@@ -123,9 +123,13 @@ export default {
       txTotal: 0,
       txPage: 1,
     };
+  created() {
+    this.loadBalance();
+    this.loadTransactions();
+    this.loadStatistics();
   },
 
-  created() {
+  activated() {
     this.loadBalance();
     this.loadTransactions();
     this.loadStatistics();
