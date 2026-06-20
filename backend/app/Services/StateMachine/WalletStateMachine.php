@@ -99,7 +99,7 @@ class WalletStateMachine implements StateMachineInterface
 
             $this->wallet->status = $targetState;
 
-            $this->updateStatusTimestamps($targetState, $context);
+            $this->updateStatusTimestamps($fromStatus, $targetState, $context);
 
             $this->wallet->save();
 
@@ -119,7 +119,7 @@ class WalletStateMachine implements StateMachineInterface
         return $this->transitionTo($action->toStatus(), $context);
     }
 
-    protected function updateStatusTimestamps(WalletStatus $targetState, array $context): void
+    protected function updateStatusTimestamps(WalletStatus $fromStatus, WalletStatus $targetState, array $context): void
     {
         match ($targetState) {
             WalletStatus::ACTIVE => $this->wallet->last_activated_at = now(),
@@ -136,12 +136,26 @@ class WalletStateMachine implements StateMachineInterface
             default => null,
         };
 
-        if ($targetState === WalletStatus::ACTIVE && $this->wallet->isFrozen()) {
-            $this->wallet->freeze_reason = null;
-        }
-
-        if ($targetState === WalletStatus::ACTIVE && $this->wallet->isRestricted()) {
-            $this->wallet->restrict_reason = null;
+        switch (true) {
+            case $targetState === WalletStatus::ACTIVE && $fromStatus === WalletStatus::FROZEN:
+                $this->wallet->freeze_reason = null;
+                break;
+            case $targetState === WalletStatus::ACTIVE && $fromStatus === WalletStatus::RESTRICTED:
+                $this->wallet->restrict_reason = null;
+                break;
+            case $targetState === WalletStatus::FROZEN && $fromStatus === WalletStatus::ACTIVE:
+                $this->wallet->restrict_reason = null;
+                break;
+            case $targetState === WalletStatus::FROZEN && $fromStatus === WalletStatus::RESTRICTED:
+                $this->wallet->restrict_reason = null;
+                break;
+            case $targetState === WalletStatus::RESTRICTED && $fromStatus === WalletStatus::ACTIVE:
+                $this->wallet->freeze_reason = null;
+                break;
+            case $targetState === WalletStatus::CLOSED && $fromStatus === WalletStatus::ACTIVE:
+                $this->wallet->freeze_reason = null;
+                $this->wallet->restrict_reason = null;
+                break;
         }
     }
 

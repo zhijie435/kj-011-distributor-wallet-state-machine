@@ -64,12 +64,18 @@ class WalletService
 
     public function unfreezeWallet(DealerWallet $wallet, string $reason = '', ?int $operatorId = null): DealerWallet
     {
-        $stateMachine = new WalletStateMachine($wallet);
+        return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            if ((float) $wallet->frozen_amount > 0) {
+                $this->unfreezeAmount($wallet, (float) $wallet->frozen_amount, '钱包解冻自动解冻冻结金额', $operatorId);
+            }
 
-        return $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE, [
-            'reason' => $reason,
-            'operator_id' => $operatorId,
-        ]);
+            $stateMachine = new WalletStateMachine($wallet);
+
+            return $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE, [
+                'reason' => $reason,
+                'operator_id' => $operatorId,
+            ]);
+        });
     }
 
     public function restrictWallet(DealerWallet $wallet, string $reason, ?int $operatorId = null): DealerWallet
