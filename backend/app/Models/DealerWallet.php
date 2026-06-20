@@ -101,4 +101,43 @@ class DealerWallet extends Model
     {
         return $query->where('status', WalletStatus::FROZEN->value);
     }
+
+    public function getAllowedTransitions(): array
+    {
+        $transitions = $this->status->allowedTransitions();
+        $result = [];
+
+        foreach ($transitions as $target) {
+            if ($target === WalletStatus::CLOSED && ((float) $this->balance > 0 || (float) $this->frozen_amount > 0)) {
+                continue;
+            }
+
+            $result[] = [
+                'status' => $target->value,
+                'label' => $target->label(),
+                'color' => $target->color(),
+                'action' => $this->getActionForTransition($target),
+            ];
+        }
+
+        return $result;
+    }
+
+    protected function getActionForTransition(WalletStatus $target): ?string
+    {
+        $actionMap = [
+            WalletStatus::INACTIVE->value . '_' . WalletStatus::ACTIVE->value => 'activate',
+            WalletStatus::ACTIVE->value . '_' . WalletStatus::FROZEN->value => 'freeze',
+            WalletStatus::ACTIVE->value . '_' . WalletStatus::RESTRICTED->value => 'restrict',
+            WalletStatus::ACTIVE->value . '_' . WalletStatus::CLOSED->value => 'close',
+            WalletStatus::FROZEN->value . '_' . WalletStatus::ACTIVE->value => 'unfreeze',
+            WalletStatus::FROZEN->value . '_' . WalletStatus::CLOSED->value => 'close',
+            WalletStatus::RESTRICTED->value . '_' . WalletStatus::ACTIVE->value => 'unrestrict',
+            WalletStatus::RESTRICTED->value . '_' . WalletStatus::FROZEN->value => 'freeze',
+            WalletStatus::RESTRICTED->value . '_' . WalletStatus::CLOSED->value => 'close',
+            WalletStatus::INACTIVE->value . '_' . WalletStatus::CLOSED->value => 'close',
+        ];
+
+        return $actionMap[$this->status->value . '_' . $target->value] ?? null;
+    }
 }

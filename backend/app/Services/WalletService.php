@@ -237,13 +237,28 @@ class WalletService
         return [
             'wallet_id' => $wallet->id,
             'wallet_no' => $wallet->wallet_no,
+            'distributor_id' => $wallet->distributor_id,
             'status' => $wallet->status->value,
             'status_label' => $wallet->status->label(),
+            'status_color' => $wallet->status->color(),
+            'is_active' => $wallet->isActive(),
+            'is_frozen' => $wallet->isFrozen(),
+            'is_restricted' => $wallet->isRestricted(),
+            'is_inactive' => $wallet->isInactive(),
+            'is_closed' => $wallet->isClosed(),
             'total_balance' => (float) $wallet->balance,
             'frozen_amount' => (float) $wallet->frozen_amount,
             'available_balance' => $wallet->getAvailableBalance(),
             'credit_limit' => (float) $wallet->credit_limit,
             'currency' => $wallet->currency,
+            'freeze_reason' => $wallet->freeze_reason,
+            'restrict_reason' => $wallet->restrict_reason,
+            'close_reason' => $wallet->close_reason,
+            'last_activated_at' => $wallet->last_activated_at?->toDateTimeString(),
+            'last_frozen_at' => $wallet->last_frozen_at?->toDateTimeString(),
+            'last_restricted_at' => $wallet->last_restricted_at?->toDateTimeString(),
+            'closed_at' => $wallet->closed_at?->toDateTimeString(),
+            'allowed_transitions' => $wallet->getAllowedTransitions(),
         ];
     }
 

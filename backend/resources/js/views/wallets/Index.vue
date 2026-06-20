@@ -45,22 +45,26 @@
           <template slot-scope="{ row }">{{ parseFloat(row.credit_limit).toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="180" />
-        <el-table-column label="操作" fixed="right" width="320">
+        <el-table-column label="操作" fixed="right" width="380">
           <template slot-scope="{ row }">
             <el-button size="mini" @click="$router.push({ name: 'wallets.show', params: { id: row.id } })">详情</el-button>
-            <template v-if="row.status === 'inactive'">
+            <template v-if="row.can_activate">
               <el-button size="mini" type="success" @click="handleTransition(row.id, 'activate', '激活')">激活</el-button>
             </template>
-            <template v-if="row.status === 'active'">
+            <template v-if="row.can_freeze">
               <el-button size="mini" type="warning" @click="handleTransition(row.id, 'freeze', '冻结')">冻结</el-button>
-              <el-button size="mini" type="warning" @click="handleTransition(row.id, 'restrict', '限制')">限制</el-button>
             </template>
-            <template v-if="row.status === 'frozen'">
+            <template v-if="row.can_unfreeze">
               <el-button size="mini" type="success" @click="handleTransition(row.id, 'unfreeze', '解冻')">解冻</el-button>
             </template>
-            <template v-if="row.status === 'restricted'">
+            <template v-if="row.can_restrict">
+              <el-button size="mini" type="warning" @click="handleTransition(row.id, 'restrict', '限制')">限制</el-button>
+            </template>
+            <template v-if="row.can_unrestrict">
               <el-button size="mini" type="success" @click="handleTransition(row.id, 'unrestrict', '解除限制')">解除限制</el-button>
-              <el-button size="mini" type="warning" @click="handleTransition(row.id, 'freeze', '冻结')">冻结</el-button>
+            </template>
+            <template v-if="row.can_close">
+              <el-button size="mini" type="danger" @click="handleTransition(row.id, 'close', '注销')">注销</el-button>
             </template>
           </template>
         </el-table-column>

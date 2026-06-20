@@ -45,6 +45,51 @@
             </el-descriptions>
           </el-card>
 
+          <el-card v-if="wallet && wallet.allowed_transitions && wallet.allowed_transitions.length > 0" style="margin-top: 20px">
+            <div slot="header">状态操作</div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap">
+              <template v-if="wallet.can_activate">
+                <el-button type="success" :loading="transitioning" @click="handleTransition('activate', '激活')">激活钱包</el-button>
+              </template>
+              <template v-if="wallet.can_freeze">
+                <el-button type="warning" :loading="transitioning" @click="handleTransition('freeze', '冻结')">冻结钱包</el-button>
+              </template>
+              <template v-if="wallet.can_unfreeze">
+                <el-button type="success" :loading="transitioning" @click="handleTransition('unfreeze', '解冻')">解冻钱包</el-button>
+              </template>
+              <template v-if="wallet.can_restrict">
+                <el-button type="warning" :loading="transitioning" @click="handleTransition('restrict', '限制')">限制钱包</el-button>
+              </template>
+              <template v-if="wallet.can_unrestrict">
+                <el-button type="success" :loading="transitioning" @click="handleTransition('unrestrict', '解除限制')">解除限制</el-button>
+              </template>
+              <template v-if="wallet.can_close">
+                <el-button type="danger" :loading="transitioning" @click="handleTransition('close', '注销')">注销钱包</el-button>
+              </template>
+            </div>
+            <el-divider content-position="left">可执行的状态转换</el-divider>
+            <el-tag
+              v-for="transition in wallet.allowed_transitions"
+              :key="transition.action"
+              :type="transition.color"
+              size="small"
+              style="margin-right: 10px; margin-bottom: 5px"
+            >
+              {{ transition.label }}
+            </el-tag>
+          </el-card>
+
+          <el-card v-if="wallet && wallet.is_closed" style="margin-top: 20px">
+            <div slot="header" style="color: #F56C6C">钱包状态</div>
+            <el-alert
+              title="钱包已注销"
+              type="error"
+              :closable="false"
+              description="该钱包已处于注销状态，无法执行任何操作。"
+              show-icon
+            />
+          </el-card>
+
           <el-card style="margin-top: 20px">
             <div slot="header">充值</div>
             <el-form :model="rechargeForm" label-width="80px" size="small">
@@ -55,9 +100,13 @@
                 <el-input v-model="rechargeForm.remark" />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" :loading="recharging" @click="handleRecharge">充值</el-button>
+                <el-button type="primary" :loading="recharging" :disabled="wallet && (wallet.is_closed || wallet.is_frozen)" @click="handleRecharge">充值</el-button>
               </el-form-item>
             </el-form>
+            <div v-if="wallet && (wallet.is_closed || wallet.is_frozen)" style="color: #909399; font-size: 12px">
+              <i class="el-icon-warning-outline" style="color: #E6A23C"></i>
+              {{ wallet.is_closed ? '已注销的钱包无法充值' : '已冻结的钱包无法充值' }}
+            </div>
           </el-card>
 
           <el-card style="margin-top: 20px">
@@ -126,6 +175,18 @@
         </el-col>
       </el-row>
     </div>
+
+    <el-dialog :title="transitionTitle" :visible.sync="showTransitionDialog" width="500px">
+      <el-form :model="transitionForm" label-width="100px">
+        <el-form-item label="操作原因" :required="transitionAction !== 'unfreeze' && transitionAction !== 'unrestrict' && transitionAction !== 'activate'">
+          <el-input v-model="transitionForm.reason" type="textarea" :rows="3" :placeholder="transitionAction === 'unfreeze' || transitionAction === 'unrestrict' || transitionAction === 'activate' ? '请输入操作原因（可选）' : '请输入操作原因'" />
+        </el-form-item>
+      </el-form>
+      <div slot="footer">
+        <el-button @click="showTransitionDialog = false">取消</el-button>
+        <el-button type="primary" :loading="transitioning" @click="confirmTransition">确定</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -146,6 +207,11 @@ export default {
       statistics: null,
       rechargeForm: { amount: 0.01, remark: '' },
       recharging: false,
+      transitioning: false,
+      showTransitionDialog: false,
+      transitionAction: '',
+      transitionTitle: '',
+      transitionForm: { reason: '' },
     };
   },
 
@@ -208,6 +274,35 @@ export default {
         this.$message.error(e.response?.data?.message || '充值失败');
       } finally {
         this.recharging = false;
+      }
+    },
+
+    handleTransition(action, title) {
+      this.transitionAction = action;
+      this.transitionTitle = title;
+      this.transitionForm.reason = '';
+      this.showTransitionDialog = true;
+    },
+
+    async confirmTransition() {
+      if (this.transitionAction !== 'unfreeze' && this.transitionAction !== 'unrestrict' && this.transitionAction !== 'activate') {
+        if (!this.transitionForm.reason) {
+          this.$message.warning('请填写操作原因');
+          return;
+        }
+      }
+
+      this.transitioning = true;
+      try {
+        await walletApi[this.transitionAction](this.$route.params.id, this.transitionForm);
+        this.$message.success('操作成功');
+        this.showTransitionDialog = false;
+        this.loadWallet();
+        this.loadStateLogs();
+      } catch (e) {
+        this.$message.error(e.response?.data?.message || '操作失败');
+      } finally {
+        this.transitioning = false;
       }
     },
   },
