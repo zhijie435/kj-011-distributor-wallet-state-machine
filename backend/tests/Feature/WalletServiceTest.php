@@ -531,4 +531,35 @@ class WalletServiceTest extends TestCase
         $this->assertNull($updatedWallet->restrict_reason);
         $this->assertEquals('注销未激活账户', $updatedWallet->close_reason);
     }
+
+    public function test_unfreeze_amount_throws_exception_for_closed_wallet(): void
+    {
+        $distributor = Distributor::factory()->create();
+        $wallet = DealerWallet::factory()->for($distributor)->closed()->create([
+            'frozen_amount' => 100.00,
+        ]);
+
+        $this->expectException(WalletException::class);
+
+        $this->walletService->unfreezeAmount($wallet, 50.00);
+    }
+
+    public function test_can_activate_only_true_for_inactive_wallet(): void
+    {
+        $inactive = DealerWallet::factory()->create();
+        $balance = $this->walletService->getWalletBalance($inactive);
+        $this->assertTrue($balance['can_activate']);
+
+        $active = DealerWallet::factory()->active()->create();
+        $balance = $this->walletService->getWalletBalance($active);
+        $this->assertFalse($balance['can_activate']);
+
+        $frozen = DealerWallet::factory()->frozen()->create();
+        $balance = $this->walletService->getWalletBalance($frozen);
+        $this->assertFalse($balance['can_activate']);
+
+        $restricted = DealerWallet::factory()->restricted()->create();
+        $balance = $this->walletService->getWalletBalance($restricted);
+        $this->assertFalse($balance['can_activate']);
+    }
 }

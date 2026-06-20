@@ -75,7 +75,14 @@ class WalletTransitionActionEnumTest extends TestCase
     public function test_close_from_and_to_status(): void
     {
         $action = WalletTransitionAction::CLOSE;
-        $this->assertEquals(WalletStatus::ACTIVE, $action->fromStatus());
+
+        $this->expectException(\LogicException::class);
+        $action->fromStatus();
+    }
+
+    public function test_close_to_status(): void
+    {
+        $action = WalletTransitionAction::CLOSE;
         $this->assertEquals(WalletStatus::CLOSED, $action->toStatus());
     }
 }

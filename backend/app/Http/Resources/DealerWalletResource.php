@@ -38,7 +38,7 @@ class DealerWalletResource extends JsonResource
             'created_at' => $this->created_at->toDateTimeString(),
             'updated_at' => $this->updated_at->toDateTimeString(),
             'allowed_transitions' => $this->getAllowedTransitions(),
-            'can_activate' => $this->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE),
+            'can_activate' => $this->isInactive(),
             'can_freeze' => $this->status->canTransitionTo(\App\Enums\WalletStatus::FROZEN),
             'can_unfreeze' => $this->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE) && $this->isFrozen(),
             'can_restrict' => $this->status->canTransitionTo(\App\Enums\WalletStatus::RESTRICTED),

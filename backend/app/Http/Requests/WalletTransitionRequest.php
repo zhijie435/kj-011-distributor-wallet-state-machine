@@ -14,14 +14,13 @@ class WalletTransitionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reason' => 'required|string|max:500',
+            'reason' => 'nullable|string|max:500',
         ];
     }
 
     public function messages(): array
     {
         return [
-            'reason.required' => '请填写操作原因',
             'reason.max' => '操作原因不能超过500字',
         ];
     }

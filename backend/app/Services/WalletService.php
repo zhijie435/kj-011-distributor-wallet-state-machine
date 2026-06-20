@@ -39,16 +39,20 @@ class WalletService
 
     public function activateWallet(DealerWallet $wallet, string $reason = '', ?int $operatorId = null): DealerWallet
     {
-        $stateMachine = new WalletStateMachine($wallet);
+        return DB::transaction(function () use ($wallet, $reason, $operatorId) {
+            $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
 
-        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE, [
-            'reason' => $reason,
-            'operator_id' => $operatorId,
-        ]);
+            $stateMachine = new WalletStateMachine($wallet);
 
-        $wallet->load(['distributor']);
+            $wallet = $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE, [
+                'reason' => $reason,
+                'operator_id' => $operatorId,
+            ]);
 
-        return $wallet;
+            $wallet->load(['distributor']);
+
+            return $wallet;
+        });
     }
 
     public function freezeWallet(DealerWallet $wallet, string $reason, ?int $operatorId = null): DealerWallet
@@ -155,10 +159,14 @@ class WalletService
 
     public function recharge(DealerWallet $wallet, float $amount, string $remark = '', ?int $operatorId = null): WalletTransaction
     {
-        $this->validateOperation($wallet, $amount);
+        if ($amount <= 0) {
+            throw WalletException::invalidAmount($amount);
+        }
 
         return DB::transaction(function () use ($wallet, $amount, $remark, $operatorId) {
             $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
+
+            $this->validateOperation($wallet, $amount);
 
             $balanceBefore = (float) $wallet->balance;
             $balanceAfter = bcadd((string) $balanceBefore, (string) $amount, 2);
@@ -182,14 +190,14 @@ class WalletService
 
     public function deduct(DealerWallet $wallet, float $amount, WalletTransactionType $type, string $remark = '', ?int $operatorId = null, ?string $referenceType = null, ?int $referenceId = null): WalletTransaction
     {
-        $this->validateOperation($wallet, $amount);
-
-        if (!$wallet->hasSufficientBalance($amount)) {
-            throw WalletException::insufficientBalance($amount, $wallet->getAvailableBalance());
+        if ($amount <= 0) {
+            throw WalletException::invalidAmount($amount);
         }
 
         return DB::transaction(function () use ($wallet, $amount, $type, $remark, $operatorId, $referenceType, $referenceId) {
             $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
+
+            $this->validateOperation($wallet, $amount);
 
             if (!$wallet->hasSufficientBalance($amount)) {
                 throw WalletException::insufficientBalance($amount, $wallet->getAvailableBalance());
@@ -219,14 +227,18 @@ class WalletService
 
     public function freezeAmount(DealerWallet $wallet, float $amount, string $remark = '', ?int $operatorId = null): WalletTransaction
     {
-        $this->validateOperation($wallet, $amount);
-
-        if (!$wallet->hasSufficientBalance($amount)) {
-            throw WalletException::insufficientBalance($amount, $wallet->getAvailableBalance());
+        if ($amount <= 0) {
+            throw WalletException::invalidAmount($amount);
         }
 
         return DB::transaction(function () use ($wallet, $amount, $remark, $operatorId) {
             $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
+
+            $this->validateOperation($wallet, $amount);
+
+            if (!$wallet->hasSufficientBalance($amount)) {
+                throw WalletException::insufficientBalance($amount, $wallet->getAvailableBalance());
+            }
 
             $frozenBefore = (float) $wallet->frozen_amount;
             $wallet->frozen_amount = bcadd((string) $frozenBefore, (string) $amount, 2);
@@ -248,6 +260,14 @@ class WalletService
 
     public function unfreezeAmount(DealerWallet $wallet, float $amount, string $remark = '', ?int $operatorId = null): WalletTransaction
     {
+        if ($amount <= 0) {
+            throw WalletException::invalidAmount($amount);
+        }
+
+        if ($wallet->isClosed()) {
+            throw WalletException::closedWallet();
+        }
+
         return DB::transaction(function () use ($wallet, $amount, $remark, $operatorId) {
             $wallet = $wallet->lockForUpdate()->findOrFail($wallet->id);
 
@@ -296,7 +316,7 @@ class WalletService
             'last_restricted_at' => $wallet->last_restricted_at?->toDateTimeString(),
             'closed_at' => $wallet->closed_at?->toDateTimeString(),
             'allowed_transitions' => $wallet->getAllowedTransitions(),
-            'can_activate' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE),
+            'can_activate' => $wallet->isInactive(),
             'can_freeze' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::FROZEN),
             'can_unfreeze' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::ACTIVE) && $wallet->isFrozen(),
             'can_restrict' => $wallet->status->canTransitionTo(\App\Enums\WalletStatus::RESTRICTED),
@@ -390,10 +410,6 @@ class WalletService
 
     protected function validateOperation(DealerWallet $wallet, float $amount): void
     {
-        if ($amount <= 0) {
-            throw WalletException::invalidAmount($amount);
-        }
-
         if ($wallet->isClosed()) {
             throw WalletException::closedWallet();
         }

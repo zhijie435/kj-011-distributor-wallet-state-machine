@@ -24,3 +24,12 @@ YXZ-CN-*-任务跟踪表*.xlsx
 .env
 .env.*
 .DS_Store
+vendor/
+public/build/
+backend/public/build/
+storage/logs/
+storage/framework/
+bootstrap/cache/*.php
+build/
+.phpunit.result.cache
+.cache/

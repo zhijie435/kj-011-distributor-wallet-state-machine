@@ -29,10 +29,12 @@ enum WalletTransitionAction: string
     {
         return match ($this) {
             self::ACTIVATE => WalletStatus::INACTIVE,
-            self::FREEZE, self::RESTRICT, self::CLOSE => WalletStatus::ACTIVE,
+            self::FREEZE => WalletStatus::ACTIVE,
             self::UNFREEZE => WalletStatus::FROZEN,
+            self::RESTRICT => WalletStatus::ACTIVE,
             self::UNRESTRICT => WalletStatus::RESTRICTED,
             self::FREEZE_FROM_RESTRICTED => WalletStatus::RESTRICTED,
+            self::CLOSE => throw new \LogicException('CLOSE action can originate from multiple states, use resolveAction() instead'),
         };
     }
 
