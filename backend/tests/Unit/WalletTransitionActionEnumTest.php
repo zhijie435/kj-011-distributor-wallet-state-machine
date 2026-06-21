@@ -30,59 +30,31 @@ class WalletTransitionActionEnumTest extends TestCase
         $this->assertEquals('注销', WalletTransitionAction::CLOSE->label());
     }
 
-    public function test_activate_from_and_to_status(): void
+    public function test_from_status_returns_correct_status(): void
     {
-        $action = WalletTransitionAction::ACTIVATE;
-        $this->assertEquals(WalletStatus::INACTIVE, $action->fromStatus());
-        $this->assertEquals(WalletStatus::ACTIVE, $action->toStatus());
+        $this->assertEquals(WalletStatus::INACTIVE, WalletTransitionAction::ACTIVATE->fromStatus());
+        $this->assertEquals(WalletStatus::ACTIVE, WalletTransitionAction::FREEZE->fromStatus());
+        $this->assertEquals(WalletStatus::FROZEN, WalletTransitionAction::UNFREEZE->fromStatus());
+        $this->assertEquals(WalletStatus::ACTIVE, WalletTransitionAction::RESTRICT->fromStatus());
+        $this->assertEquals(WalletStatus::RESTRICTED, WalletTransitionAction::UNRESTRICT->fromStatus());
+        $this->assertEquals(WalletStatus::RESTRICTED, WalletTransitionAction::FREEZE_FROM_RESTRICTED->fromStatus());
     }
 
-    public function test_freeze_from_and_to_status(): void
+    public function test_from_status_throws_exception_for_close_action(): void
     {
-        $action = WalletTransitionAction::FREEZE;
-        $this->assertEquals(WalletStatus::ACTIVE, $action->fromStatus());
-        $this->assertEquals(WalletStatus::FROZEN, $action->toStatus());
-    }
-
-    public function test_unfreeze_from_and_to_status(): void
-    {
-        $action = WalletTransitionAction::UNFREEZE;
-        $this->assertEquals(WalletStatus::FROZEN, $action->fromStatus());
-        $this->assertEquals(WalletStatus::ACTIVE, $action->toStatus());
-    }
-
-    public function test_restrict_from_and_to_status(): void
-    {
-        $action = WalletTransitionAction::RESTRICT;
-        $this->assertEquals(WalletStatus::ACTIVE, $action->fromStatus());
-        $this->assertEquals(WalletStatus::RESTRICTED, $action->toStatus());
-    }
-
-    public function test_unrestrict_from_and_to_status(): void
-    {
-        $action = WalletTransitionAction::UNRESTRICT;
-        $this->assertEquals(WalletStatus::RESTRICTED, $action->fromStatus());
-        $this->assertEquals(WalletStatus::ACTIVE, $action->toStatus());
-    }
-
-    public function test_freeze_from_restricted_from_and_to_status(): void
-    {
-        $action = WalletTransitionAction::FREEZE_FROM_RESTRICTED;
-        $this->assertEquals(WalletStatus::RESTRICTED, $action->fromStatus());
-        $this->assertEquals(WalletStatus::FROZEN, $action->toStatus());
-    }
-
-    public function test_close_from_and_to_status(): void
-    {
-        $action = WalletTransitionAction::CLOSE;
-
         $this->expectException(\LogicException::class);
-        $action->fromStatus();
+
+        WalletTransitionAction::CLOSE->fromStatus();
     }
 
-    public function test_close_to_status(): void
+    public function test_to_status_returns_correct_status(): void
     {
-        $action = WalletTransitionAction::CLOSE;
-        $this->assertEquals(WalletStatus::CLOSED, $action->toStatus());
+        $this->assertEquals(WalletStatus::ACTIVE, WalletTransitionAction::ACTIVATE->toStatus());
+        $this->assertEquals(WalletStatus::FROZEN, WalletTransitionAction::FREEZE->toStatus());
+        $this->assertEquals(WalletStatus::ACTIVE, WalletTransitionAction::UNFREEZE->toStatus());
+        $this->assertEquals(WalletStatus::RESTRICTED, WalletTransitionAction::RESTRICT->toStatus());
+        $this->assertEquals(WalletStatus::ACTIVE, WalletTransitionAction::UNRESTRICT->toStatus());
+        $this->assertEquals(WalletStatus::FROZEN, WalletTransitionAction::FREEZE_FROM_RESTRICTED->toStatus());
+        $this->assertEquals(WalletStatus::CLOSED, WalletTransitionAction::CLOSE->toStatus());
     }
 }

@@ -97,6 +97,20 @@ class WalletStateMachine implements StateMachineInterface
 
     public function transitionByAction(WalletTransitionAction $action, array $context = []): DealerWallet
     {
+        $currentStatus = $this->wallet->status;
+
+        if ($action !== WalletTransitionAction::CLOSE) {
+            $expectedFrom = $action->fromStatus();
+            if ($currentStatus !== $expectedFrom) {
+                throw StateTransitionException::invalidActionForState(
+                    $action->label(),
+                    $currentStatus->label(),
+                    $expectedFrom->label(),
+                    $this->wallet
+                );
+            }
+        }
+
         return $this->transitionTo($action->toStatus(), $context);
     }
 

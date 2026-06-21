@@ -17,6 +17,7 @@ class StateTransitionException extends BaseException
         'TERMINAL_STATE' => 'TERMINAL_STATE_REACHED',
         'VALIDATION_FAILED' => 'STATE_TRANSITION_VALIDATION_FAILED',
         'RULE_VIOLATION' => 'STATE_TRANSITION_RULE_VIOLATION',
+        'INVALID_ACTION_FOR_STATE' => 'INVALID_ACTION_FOR_CURRENT_STATE',
     ];
 
     public function __construct(
@@ -130,6 +131,27 @@ class StateTransitionException extends BaseException
         return self::make($message, 'RULE_VIOLATION', [
             'rule' => $rule,
             'context' => $context,
+        ], 422, $wallet, $action);
+    }
+
+    public static function invalidActionForState(
+        string $actionLabel,
+        string $currentStateLabel,
+        string $expectedStateLabel,
+        ?DealerWallet $wallet = null,
+        ?WalletTransitionAction $action = null,
+    ): self {
+        $message = sprintf(
+            '动作「%s」仅适用于「%s」状态，当前状态为「%s」',
+            $actionLabel,
+            $expectedStateLabel,
+            $currentStateLabel,
+        );
+
+        return self::make($message, 'INVALID_ACTION_FOR_STATE', [
+            'action_label' => $actionLabel,
+            'current_state_label' => $currentStateLabel,
+            'expected_state_label' => $expectedStateLabel,
         ], 422, $wallet, $action);
     }
 }

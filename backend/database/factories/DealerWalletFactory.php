@@ -12,7 +12,7 @@ class DealerWalletFactory extends Factory
     {
         return [
             'distributor_id' => Distributor::factory(),
-            'wallet_no' => 'W' . now()->format('YmdHis') . str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT),
+            'wallet_no' => 'W' . now()->format('YmdHisv') . str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT),
             'status' => WalletStatus::INACTIVE->value,
             'balance' => 0,
             'frozen_amount' => 0,

@@ -17,43 +17,54 @@ class WalletStateMachineTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected DealerWallet $wallet;
-
-    protected function setUp(): void
+    protected function createWallet(WalletStatus $status = WalletStatus::INACTIVE, array $attributes = []): DealerWallet
     {
-        parent::setUp();
-
         $distributor = Distributor::factory()->create();
-        $this->wallet = DealerWallet::factory()->for($distributor)->create([
-            'status' => WalletStatus::INACTIVE->value,
-        ]);
+
+        return DealerWallet::factory()->for($distributor)->create(array_merge([
+            'status' => $status->value,
+        ], $attributes));
     }
 
-    public function test_get_model_returns_wallet(): void
+    public function test_get_model_returns_dealer_wallet(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $this->assertSame($this->wallet, $stateMachine->getModel());
+        $this->assertSame($wallet, $stateMachine->getModel());
     }
 
-    public function test_current_state_returns_correct_status(): void
+    public function test_current_state_returns_wallet_status(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::ACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $this->assertEquals(WalletStatus::INACTIVE, $stateMachine->currentState());
+        $this->assertEquals(WalletStatus::ACTIVE, $stateMachine->currentState());
     }
 
-    public function test_can_transition_to_valid_state(): void
+    public function test_can_transition_to_returns_true_for_valid_transition(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
         $this->assertTrue($stateMachine->canTransitionTo(WalletStatus::ACTIVE));
-        $this->assertFalse($stateMachine->canTransitionTo(WalletStatus::FROZEN));
+        $this->assertTrue($stateMachine->canTransitionTo(WalletStatus::CLOSED));
     }
 
-    public function test_validate_transition_success(): void
+    public function test_can_transition_to_returns_false_for_invalid_transition(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $this->assertFalse($stateMachine->canTransitionTo(WalletStatus::FROZEN));
+        $this->assertFalse($stateMachine->canTransitionTo(WalletStatus::RESTRICTED));
+        $this->assertFalse($stateMachine->canTransitionTo(WalletStatus::INACTIVE));
+    }
+
+    public function test_validate_transition_success_for_valid_transition(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
         $result = $stateMachine->validateTransition(WalletStatus::ACTIVE);
 
@@ -64,8 +75,8 @@ class WalletStateMachineTest extends TestCase
 
     public function test_validate_transition_fails_for_terminal_state(): void
     {
-        $this->wallet->status = WalletStatus::CLOSED;
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::CLOSED);
+        $stateMachine = new WalletStateMachine($wallet);
 
         $result = $stateMachine->validateTransition(WalletStatus::ACTIVE);
 
@@ -74,9 +85,34 @@ class WalletStateMachineTest extends TestCase
         $this->assertTrue($result->errors['is_terminal']);
     }
 
-    public function test_validate_transition_fails_for_invalid_transition(): void
+    public function test_validate_transition_fails_when_closing_with_balance(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::ACTIVE, ['balance' => 100.00]);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $result = $stateMachine->validateTransition(WalletStatus::CLOSED);
+
+        $this->assertFalse($result->isValid());
+        $this->assertArrayHasKey('balance', $result->errors);
+        $this->assertEquals(100.00, $result->errors['balance']);
+    }
+
+    public function test_validate_transition_fails_when_closing_with_frozen_amount(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::ACTIVE, ['frozen_amount' => 50.00]);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $result = $stateMachine->validateTransition(WalletStatus::CLOSED);
+
+        $this->assertFalse($result->isValid());
+        $this->assertArrayHasKey('frozen_amount', $result->errors);
+        $this->assertEquals(50.00, $result->errors['frozen_amount']);
+    }
+
+    public function test_validate_transition_fails_for_invalid_state_transition(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
         $result = $stateMachine->validateTransition(WalletStatus::FROZEN);
 
@@ -86,66 +122,41 @@ class WalletStateMachineTest extends TestCase
         $this->assertArrayHasKey('allowed_states', $result->errors);
     }
 
-    public function test_validate_transition_fails_for_close_with_balance(): void
+    public function test_transition_to_throws_exception_for_terminal_state(): void
     {
-        $this->wallet->status = WalletStatus::ACTIVE;
-        $this->wallet->balance = 100.00;
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::CLOSED);
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $result = $stateMachine->validateTransition(WalletStatus::CLOSED);
+        $this->expectException(StateTransitionException::class);
 
-        $this->assertFalse($result->isValid());
-        $this->assertArrayHasKey('balance', $result->errors);
-    }
-
-    public function test_validate_transition_fails_for_close_with_frozen_amount(): void
-    {
-        $this->wallet->status = WalletStatus::ACTIVE;
-        $this->wallet->balance = 0;
-        $this->wallet->frozen_amount = 50.00;
-        $stateMachine = new WalletStateMachine($this->wallet);
-
-        $result = $stateMachine->validateTransition(WalletStatus::CLOSED);
-
-        $this->assertFalse($result->isValid());
-        $this->assertArrayHasKey('frozen_amount', $result->errors);
+        $stateMachine->transitionTo(WalletStatus::ACTIVE);
     }
 
     public function test_transition_to_throws_exception_for_invalid_transition(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
         $this->expectException(StateTransitionException::class);
 
         $stateMachine->transitionTo(WalletStatus::FROZEN);
     }
 
-    public function test_transition_to_updates_wallet_status(): void
+    public function test_transition_to_activate_from_inactive(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
-
-        $updatedWallet = $stateMachine->transitionTo(WalletStatus::ACTIVE);
-
-        $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
-        $this->assertNotNull($updatedWallet->last_activated_at);
-        $this->assertDatabaseHas('dealer_wallets', [
-            'id' => $this->wallet->id,
-            'status' => WalletStatus::ACTIVE->value,
-        ]);
-    }
-
-    public function test_transition_to_creates_state_log(): void
-    {
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
         $operator = User::factory()->create();
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $stateMachine->transitionTo(WalletStatus::ACTIVE, [
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::ACTIVE, [
             'reason' => '测试激活',
             'operator_id' => $operator->id,
         ]);
 
+        $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
+        $this->assertNotNull($updatedWallet->last_activated_at);
         $this->assertDatabaseHas('wallet_state_logs', [
-            'wallet_id' => $this->wallet->id,
+            'wallet_id' => $wallet->id,
             'from_status' => WalletStatus::INACTIVE->value,
             'to_status' => WalletStatus::ACTIVE->value,
             'action' => WalletTransitionAction::ACTIVATE->value,
@@ -154,25 +165,15 @@ class WalletStateMachineTest extends TestCase
         ]);
     }
 
-    public function test_transition_by_action_activate(): void
+    public function test_transition_to_freeze_from_active(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::ACTIVE);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE, [
-            'reason' => '激活钱包',
-        ]);
-
-        $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
-    }
-
-    public function test_transition_by_action_freeze(): void
-    {
-        $this->wallet->status = WalletStatus::ACTIVE;
-        $this->wallet->save();
-        $stateMachine = new WalletStateMachine($this->wallet);
-
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE, [
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::FROZEN, [
             'reason' => '违规操作',
+            'operator_id' => $operator->id,
         ]);
 
         $this->assertEquals(WalletStatus::FROZEN, $updatedWallet->status);
@@ -180,27 +181,34 @@ class WalletStateMachineTest extends TestCase
         $this->assertNotNull($updatedWallet->last_frozen_at);
     }
 
-    public function test_transition_by_action_unfreeze(): void
+    public function test_transition_to_unfreeze_auto_unfreezes_amount(): void
     {
-        $this->wallet->status = WalletStatus::FROZEN;
-        $this->wallet->freeze_reason = '违规操作';
-        $this->wallet->save();
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::FROZEN, [
+            'frozen_amount' => 100.00,
+            'freeze_reason' => '违规',
+        ]);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE);
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::ACTIVE, [
+            'reason' => '解冻',
+            'operator_id' => $operator->id,
+        ]);
 
         $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
+        $this->assertEquals(0, $updatedWallet->frozen_amount);
         $this->assertNull($updatedWallet->freeze_reason);
     }
 
-    public function test_transition_by_action_restrict(): void
+    public function test_transition_to_restrict_from_active(): void
     {
-        $this->wallet->status = WalletStatus::ACTIVE;
-        $this->wallet->save();
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::ACTIVE);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::RESTRICT, [
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::RESTRICTED, [
             'reason' => '风险预警',
+            'operator_id' => $operator->id,
         ]);
 
         $this->assertEquals(WalletStatus::RESTRICTED, $updatedWallet->status);
@@ -208,28 +216,17 @@ class WalletStateMachineTest extends TestCase
         $this->assertNotNull($updatedWallet->last_restricted_at);
     }
 
-    public function test_transition_by_action_unrestrict(): void
+    public function test_transition_to_freeze_from_restricted_clears_restrict_reason(): void
     {
-        $this->wallet->status = WalletStatus::RESTRICTED;
-        $this->wallet->restrict_reason = '风险预警';
-        $this->wallet->save();
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::RESTRICTED, [
+            'restrict_reason' => '风险预警',
+        ]);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::UNRESTRICT);
-
-        $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
-        $this->assertNull($updatedWallet->restrict_reason);
-    }
-
-    public function test_transition_by_action_freeze_from_restricted(): void
-    {
-        $this->wallet->status = WalletStatus::RESTRICTED;
-        $this->wallet->restrict_reason = '风险预警';
-        $this->wallet->save();
-        $stateMachine = new WalletStateMachine($this->wallet);
-
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE_FROM_RESTRICTED, [
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::FROZEN, [
             'reason' => '确认违规',
+            'operator_id' => $operator->id,
         ]);
 
         $this->assertEquals(WalletStatus::FROZEN, $updatedWallet->status);
@@ -237,16 +234,35 @@ class WalletStateMachineTest extends TestCase
         $this->assertNull($updatedWallet->restrict_reason);
     }
 
-    public function test_transition_by_action_close(): void
+    public function test_transition_to_unrestrict_clears_restrict_reason(): void
     {
-        $this->wallet->status = WalletStatus::ACTIVE;
-        $this->wallet->balance = 0;
-        $this->wallet->frozen_amount = 0;
-        $this->wallet->save();
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::RESTRICTED, [
+            'restrict_reason' => '风险预警',
+        ]);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::CLOSE, [
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::ACTIVE, [
+            'reason' => '解除风险',
+            'operator_id' => $operator->id,
+        ]);
+
+        $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
+        $this->assertNull($updatedWallet->restrict_reason);
+    }
+
+    public function test_transition_to_close_from_active(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::ACTIVE, [
+            'balance' => 0,
+            'frozen_amount' => 0,
+        ]);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::CLOSED, [
             'reason' => '经销商注销',
+            'operator_id' => $operator->id,
         ]);
 
         $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
@@ -254,36 +270,148 @@ class WalletStateMachineTest extends TestCase
         $this->assertNotNull($updatedWallet->closed_at);
     }
 
-    public function test_allowed_transitions(): void
+    public function test_transition_to_close_from_frozen_clears_freeze_reason(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::FROZEN, [
+            'balance' => 0,
+            'frozen_amount' => 0,
+            'freeze_reason' => '违规',
+        ]);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $transitions = $stateMachine->allowedTransitions();
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::CLOSED, [
+            'reason' => '注销',
+            'operator_id' => $operator->id,
+        ]);
 
-        $this->assertCount(2, $transitions);
-        $this->assertContains(WalletStatus::ACTIVE, $transitions);
-        $this->assertContains(WalletStatus::CLOSED, $transitions);
+        $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
+        $this->assertNull($updatedWallet->freeze_reason);
+        $this->assertNull($updatedWallet->restrict_reason);
     }
 
-    public function test_full_state_flow(): void
+    public function test_transition_by_action_activate(): void
     {
-        $stateMachine = new WalletStateMachine($this->wallet);
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE);
-        $this->assertEquals(WalletStatus::ACTIVE, $wallet->status);
+        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::ACTIVATE, ['reason' => '激活']);
 
-        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::RESTRICT, ['reason' => '风险']);
-        $this->assertEquals(WalletStatus::RESTRICTED, $wallet->status);
+        $this->assertEquals(WalletStatus::ACTIVE, $updatedWallet->status);
+    }
 
-        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE_FROM_RESTRICTED, ['reason' => '违规']);
-        $this->assertEquals(WalletStatus::FROZEN, $wallet->status);
+    public function test_transition_by_action_freeze(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::ACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
 
-        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::UNFREEZE);
-        $this->assertEquals(WalletStatus::ACTIVE, $wallet->status);
+        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE, ['reason' => '冻结']);
 
-        $wallet = $stateMachine->transitionByAction(WalletTransitionAction::CLOSE, ['reason' => '注销']);
-        $this->assertEquals(WalletStatus::CLOSED, $wallet->status);
+        $this->assertEquals(WalletStatus::FROZEN, $updatedWallet->status);
+    }
 
-        $this->assertEquals(5, $wallet->stateLogs()->count());
+    public function test_transition_by_action_freeze_from_restricted(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::RESTRICTED);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $updatedWallet = $stateMachine->transitionByAction(WalletTransitionAction::FREEZE_FROM_RESTRICTED, ['reason' => '冻结']);
+
+        $this->assertEquals(WalletStatus::FROZEN, $updatedWallet->status);
+    }
+
+    public function test_allowed_transitions_matches_enum(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::ACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $this->assertEquals(
+            WalletStatus::ACTIVE->allowedTransitions(),
+            $stateMachine->allowedTransitions()
+        );
+    }
+
+    public function test_before_transition_hook_is_executed(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $hookExecuted = false;
+        $stateMachine->beforeTransition(function () use (&$hookExecuted) {
+            $hookExecuted = true;
+        });
+
+        $stateMachine->transitionTo(WalletStatus::ACTIVE);
+
+        $this->assertTrue($hookExecuted);
+    }
+
+    public function test_after_transition_hook_is_executed(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $hookExecuted = false;
+        $stateMachine->afterTransition(function () use (&$hookExecuted) {
+            $hookExecuted = true;
+        });
+
+        $stateMachine->transitionTo(WalletStatus::ACTIVE);
+
+        $this->assertTrue($hookExecuted);
+    }
+
+    public function test_transition_persists_state_log(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::ACTIVE);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $stateMachine->transitionTo(WalletStatus::FROZEN, [
+            'reason' => '测试冻结',
+            'operator_id' => $operator->id,
+        ]);
+
+        $this->assertDatabaseCount('wallet_state_logs', 1);
+        $this->assertDatabaseHas('wallet_state_logs', [
+            'wallet_id' => $wallet->id,
+            'action' => WalletTransitionAction::FREEZE->value,
+        ]);
+    }
+
+    public function test_transition_to_close_from_inactive(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::INACTIVE);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::CLOSED, [
+            'reason' => '放弃激活',
+            'operator_id' => $operator->id,
+        ]);
+
+        $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
+        $this->assertEquals('放弃激活', $updatedWallet->close_reason);
+        $this->assertNotNull($updatedWallet->closed_at);
+    }
+
+    public function test_transition_to_close_from_restricted(): void
+    {
+        $wallet = $this->createWallet(WalletStatus::RESTRICTED, [
+            'balance' => 0,
+            'frozen_amount' => 0,
+            'restrict_reason' => '风险',
+        ]);
+        $operator = User::factory()->create();
+        $stateMachine = new WalletStateMachine($wallet);
+
+        $updatedWallet = $stateMachine->transitionTo(WalletStatus::CLOSED, [
+            'reason' => '注销受限账户',
+            'operator_id' => $operator->id,
+        ]);
+
+        $this->assertEquals(WalletStatus::CLOSED, $updatedWallet->status);
+        $this->assertNull($updatedWallet->restrict_reason);
+        $this->assertEquals('注销受限账户', $updatedWallet->close_reason);
     }
 }
