@@ -21,10 +21,16 @@ class WalletNotificationJob implements ShouldQueue
         public string $toStatus,
         public ?string $reason = null,
     ) {
+        $this->onConnection(config('wallet.queue.connection'));
+        $this->onQueue(config('wallet.queue.notification_queue'));
     }
 
     public function handle(): void
     {
+        if (!config('wallet.notification.enabled', true)) {
+            return;
+        }
+
         $wallet = DealerWallet::with('distributor')->find($this->walletId);
 
         if (!$wallet) {
