@@ -39,3 +39,5 @@ backend/storage/framework/
 **/storage/framework/
 backend/bootstrap/cache/*.php
 **/bootstrap/cache/*.php
+**/dist/
+**/build/
