@@ -33,3 +33,9 @@ bootstrap/cache/*.php
 build/
 .phpunit.result.cache
 .cache/
+backend/storage/logs/
+**/storage/logs/
+backend/storage/framework/
+**/storage/framework/
+backend/bootstrap/cache/*.php
+**/bootstrap/cache/*.php
